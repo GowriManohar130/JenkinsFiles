@@ -1,0 +1,150 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "infyshinetech/notifications"
+        KUBECONFIG = "C:\\Users\\infyshine\\.kube\\config"
+    }
+
+        stages {
+
+        stage('QA image backup') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker')
+                     {
+                        docker.image("${IMAGE_NAME}:qa").pull()
+                         bat "docker tag ${IMAGE_NAME}:qa ${IMAGE_NAME}:qa-prev"
+                         docker.image("${IMAGE_NAME}:qa-prev").push()
+                         bat "docker rmi ${IMAGE_NAME}:qa"
+                        bat "docker rmi ${IMAGE_NAME}:qa-prev"
+                    }
+                }
+            }
+        }
+
+        stage('Pull From Docker Hub') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker')
+                     {
+                        docker.image("${IMAGE_NAME}:dev").pull()
+                    }
+                }
+            }
+        }
+
+        stage('Change Tag #dev and Push to Docker Hub with #qa') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker')
+                     {
+                        //docker.image("${IMAGE_NAME}:dev").tag("${IMAGE_NAME}:qa")
+                        bat "docker tag ${IMAGE_NAME}:dev ${IMAGE_NAME}:qa"
+                        docker.image("${IMAGE_NAME}:qa").push()
+                        bat "docker rmi ${IMAGE_NAME}:dev"
+                        bat "docker rmi ${IMAGE_NAME}:qa"
+                    }
+                }
+            }
+        }
+
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    // Deploy to Kubernetes
+                    bat 'kubectl rollout restart deployment/notifications-deployment -n qa'
+                }
+            }
+        }
+        
+    }
+
+    post {
+        success {
+            script {
+                emailext(
+                to: 'java@infyshine.com, devops@infyshine.com',
+                subject: "Deployed Successfully_${JOB_NAME}_${env.BUILD_NUMBER}",
+                body: """<!DOCTYPE html>
+                        <html>
+                        <style>
+                        table, th, td { border:1px solid black; border-style: none; }
+                        </style>
+                        <body>
+                        <div>
+                    <p style="background-color: green; text-align: center; color: aliceblue; height: 30px; font-size: 20px; padding-top: 5px;">
+                        SUCCESS
+                    </p>
+                </div>
+                         <table style="width:100%">
+                            <tr><td>Deployment Status</td><td>: Success</td></tr>
+                            <tr><td>Job</td><td>: ${JOB_NAME}</td></tr>
+                            <tr><td>Deployment Number</td><td>: ${env.BUILD_NUMBER}</td></tr>
+                            <tr><td>Environment</td><td>: QA</td></tr>
+                            <tr><td>Deployment URL</td><td>: ${env.ENV_URL}</td></tr>
+                            <tr><td>Committed by</td><td>: ${env.COMMITTED_BY}</td></tr>
+                            <tr><td>Commit message</td><td>: ${env.COMMIT_MSG}</td></tr>
+                            <tr><td>Description</td><td>: The Deployment of image ${IMAGE_NAME}:qa is Success in QA Environment</td></tr>
+                        </table>
+                        <div>
+                    <p style="background-color: rgb(228, 228, 230); text-align: center; color: rgb(11, 12, 12); height: 30px; font-size: 20px; padding-top: 5px;">
+                        Note*: Please refer above for Build Logs
+                    </p>
+                </div>
+                        </body>
+                        </html>""",
+                mimeType: 'text/html',
+                from: 'onboarding@infyshine.com',
+                attachLog: true
+            )
+            }
+            always {
+            cleanWs()
+        }
+        }
+        failure {
+            script {
+                emailext(
+                to: 'java@infyshine.com, devops@infyshine.com',
+                subject: "Deployment Failed_${JOB_NAME}_${env.BUILD_NUMBER}",
+                body: """<!DOCTYPE html>
+                        <html>
+                        <style>
+                        table, th, td { border:1px solid black; border-style: none; }
+                        </style>
+                        <body>
+                        <div>
+                    <p style="background-color: red; text-align: center; color: aliceblue; height: 30px; font-size: 20px; padding-top: 5px;">
+                        FAILED
+                    </p>
+                </div>
+                        <table style="width:100%">
+                            <tr><td>Deployment Status</td><td>: Failed</td></tr>
+                            <tr><td>Job</td><td>: ${JOB_NAME}</td></tr>
+                            <tr><td>Deployment Number</td><td>: ${env.BUILD_NUMBER}</td></tr>
+                            <tr><td>Environment</td><td>: QA</td></tr>
+                            <tr><td>Deployment URL</td><td>: ${env.ENV_URL}</td></tr>
+                            <tr><td>Committed by</td><td>: ${env.COMMITTED_BY}</td></tr>
+                            <tr><td>Commit message</td><td>: ${env.COMMIT_MSG}</td></tr>
+                            <tr><td>Description</td><td>: The Deployment of image ${IMAGE_NAME}:qa failed in QA Environment</td></tr>
+                        </table>
+                        <div>
+                    <p style="background-color: rgb(228, 228, 230); text-align: center; color: rgb(11, 12, 12); height: 30px; font-size: 20px; padding-top: 5px;">
+                        Note*: Please refer above for Build Logs
+                    </p>
+                </div>
+                        </body>
+                        </html>""",
+                mimeType: 'text/html',
+                from: 'onboarding@infyshine.com',
+                attachLog: true
+            )
+            }
+            always {
+            cleanWs()
+        }
+        }
+    }
+}

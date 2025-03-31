@@ -1,0 +1,134 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
+pipeline {
+    agent any
+    
+    environment {
+        MONGO_DATABASE = 'aggregations'
+        MONGO_SPARE_DATABASE = 'spare'
+        MONGO_HOST = 'localhost'
+        MONGO_PORT = '27017'
+        EXPORT_DIR = 'C:\\Users\\infyshine\\Downloads\\backup\\qa\\Mongo-qa'
+        EXPORT_SPARE_DIR = 'C:\\Users\\infyshine\\Downloads\\backup\\qa\\Mongo'
+    }
+    
+    stages {
+        stage('Database Backup') {
+            steps {
+                script {
+                    def exportDir = env.EXPORT_DIR
+                    def timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date())
+                    def backupFolder = "${exportDir}\\MONGO-BACKUP-QA_${timestamp}"
+                    bat "mkdir \"${backupFolder}\""
+                    def exportFile = "${backupFolder}"
+                    env.FOLDER = exportFile
+                    
+                    def mongodumpCommand = "\"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongodump\" -h${env.MONGO_HOST}:${env.MONGO_PORT} --db ${env.MONGO_DATABASE} --out ${exportFile}"
+                    bat(mongodumpCommand)
+                }
+            }
+        }
+
+        stage('Restoring the data') {
+            steps {
+                script {
+                    def mongorestoreCommand = "\"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongorestore\" --host ${env.MONGO_HOST} --port ${env.MONGO_PORT} --db ${env.MONGO_SPARE_DATABASE} \"${env.FOLDER}\\aggregations\""
+                    bat(mongorestoreCommand)
+                }
+            }
+        }
+
+
+        // stage{
+        //     steps{
+        //         script{
+        //             def mongoshcmd = "\"C:\\Program Files\\MongoDB\\Server\\7.0\\bin"mongorestore
+        //             bat(mongoshcmd)
+        //             bat "show dbs"
+        //             bat "manohar"
+        //             bat "db.getCollectionNames().forEach(function(collectionName) {
+        //                 // Update all documents in each collection
+        //                 db.getCollection(collectionName).updateMany(
+        //                     {}, // Match all documents
+        //                     { 
+        //                         $set: { 
+        //                             firstName: "************",
+        //                             lastName: "************",
+        //                             email: "************",
+        //                             alternateEmail: "************",
+        //                             employeeName: "************",
+        //                         } 
+        //                     }
+        //                 );
+        //             });"
+        //         }
+        //     }
+        // }
+
+        stage('Anonymize Data') {
+            steps {
+                script {
+                    // Define the path to mongosh
+                    def mongoshPath = "\"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongosh\""
+                    
+                    // Inline JavaScript for anonymization
+                    def anonymizationScript = """
+                        const dbs = db.getMongo().getDBNames();
+                        dbs.forEach(function(dbName) {
+                            const currentDb = db.getSiblingDB(dbName);
+                            currentDb.getCollectionInfos().forEach(function(info) {
+                                const collectionName = info.name;
+                                currentDb.getCollection(collectionName).updateMany(
+                                    {},
+                                    {
+                                        \$set: {
+                                            firstName: "REDACTED",
+                                            lastName: "REDACTED",
+                                            email: "REDACTED",
+                                            alternateEmail: "REDACTED",
+                                            employeeName: "REDACTED"
+                                        }
+                                    }
+                                );
+                            });
+                        });
+                    """
+                    
+                    // Execute the anonymization
+                    writeFile(file: 'anonymize_script.js', text: anonymizationScript)
+                    bat "${mongoshPath} --file anonymize_script.js"
+                    deleteFile('anonymize_script.js')
+                }
+            }
+        }
+
+
+
+        stage('backup anonymized data'){
+            steps{
+                script{
+                    def mongoexportSpare = env.MONGO_EXPORT_SPARE
+                    def timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date())
+                    def mongobackupSpareFolder = "${mongoexportSpare}\\MONGO-BACKUP-SPARE_${timestamp}"
+                    bat "mkdir \"${mongobackupSpareFolder}\""
+                    def mongoexportspareFile = "${mongobackupSpareFolder}"
+
+                    def mongodump = "\"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongodump\" -h${env.MONGO_HOST}:${env.MONGO_PORT} --db ${env.MONGO_SPARE_DATABASE} --out ${mongoexportspareFile}"
+                    
+                    bat (mongodump)
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up port forwarding...'
+            // Clean up port forwarding using kubectl
+            script {
+                bat 'taskkill /F /IM kubectl.exe'
+            }
+        }
+    }
+}

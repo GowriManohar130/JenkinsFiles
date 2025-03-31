@@ -1,0 +1,33 @@
+pipeline {
+    agent any
+    stages {
+        stage('Merge develop into main') {
+            steps {
+                script {
+                    def sourceBranch = 'DEV'
+                    def targetBranch = '1.0'
+
+                    bat 'git config --global user.name "Java Team"'
+                    bat 'git config --global user.email "java@infyshine.com"'
+                    
+                    // Fetch latest changes
+                    bat 'git fetch --all'
+
+                    // Checkout the target branch
+                    bat "git checkout ${targetBranch}"
+
+                    // Merge source branch into target branch
+                    bat "git merge origin/${sourceBranch} --allow-unrelated-histories"
+
+                    // Push merged changes back to remote repository
+                    bat "git push origin ${targetBranch}"
+                }
+            }
+        }
+    }
+    post {
+        always {
+           cleanWs()
+        }
+    }
+}

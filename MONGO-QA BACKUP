@@ -1,0 +1,35 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+pipeline {
+    agent any
+    
+    environment {
+        MONGO_DATABASE = 'aggregations'
+        MONGO_HOST = '192.168.88.186'
+        MONGO_PORT = '27017'
+        EXPORT_DIR = 'C:\\Users\\infyshine\\Downloads\\backup\\qa\\Mongo-qa'
+    }
+    
+    stages {
+        stage('Database Backup') {
+            steps {
+                script {
+                    def exportDir = env.EXPORT_DIR
+                    def timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date())
+                    def backupFolder = "${exportDir}\\MONGO-BACKUP-QA_${timestamp}"
+                    bat "mkdir \"${backupFolder}\""
+                    def exportFile = "${backupFolder}"
+                    
+                    def mongodumpCommand = "\"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongodump\" -h${env.MONGO_HOST}:${env.MONGO_PORT} --db ${env.MONGO_DATABASE} --out ${exportFile}"
+                    bat(mongodumpCommand)
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Backup Success'
+        }
+    }
+}

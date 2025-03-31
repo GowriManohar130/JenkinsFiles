@@ -1,0 +1,68 @@
+pipeline {
+    agent any
+    
+    environment {
+        KUBECONFIG = "C:\\Users\\infyshine\\.kube\\config"
+    }
+    stages {
+        stage('checking context') {
+            steps {
+                script {
+                  def context = bat(script: 'kubectl config current-context', returnStdout: true).trim()
+
+                }
+            }
+        }
+        stage('uat Port Forwarding') {
+            when {
+                expression {
+                     context == 'hrdome_uat'
+                }
+            }
+            steps {
+                script {
+                    bat 'start kubectl proxy'
+                    bat 'start kubectl port-forward service/mongodb-aggregations-service 27018:27017 -n uat'
+                    bat 'start kubectl port-forward service/mysql-common-data-service 3307:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-users-service 3308:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-timesheets-service 3309:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-leaves-service 3310:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-organizations-service 3311:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-expenses-service 3312:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-projects-service 3313:3306 -n uat'
+                    bat 'start kubectl port-forward service/mysql-appowner-service 3314:3306 -n uat'
+                    bat 'kubectl port-forward service/mysql-appraisals-service 3315:3306 -n uat'
+                }
+            }
+        }
+        stage('prod Port Forwarding') {
+            when {
+                expression {
+                    context == 'hrdome_prod'
+                }
+            }
+            steps {
+                script {
+                    withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AWS', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    bat 'start kubectl proxy'
+                    bat 'start kubectl port-forward service/mongodb-aggregations-service 27018:27017 -n prod'
+                    bat 'start kubectl port-forward service/mysql-common-data-service 3307:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-users-service 3308:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-timesheets-service 3309:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-leaves-service 3310:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-organizations-service 3311:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-expenses-service 3312:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-projects-service 3313:3306 -n prod'
+                    bat 'start kubectl port-forward service/mysql-appowner-service 3314:3306 -n prod'
+                    bat 'kubectl port-forward service/mysql-appraisals-service 3315:3306 -n prod'
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            echo 'Port forwarding completed.'
+        }
+    }
+}

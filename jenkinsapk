@@ -1,0 +1,194 @@
+pipeline {
+    agent any
+
+    environment {
+        EXPO_CLI_VERSION = 'latest'
+        EXPO_TOKEN = credentials('expo') // Make sure this matches the ID in Jenkins Credentials
+    }
+
+    tools {
+        nodejs 'nodejs' // Ensure this matches the name in Jenkins Global Tool Configuration
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                // Clone the repository and specify the branch
+               git branch: "${env.PROJECT}", changelog: false, credentialsId: 'BitBucket', poll: false, url: 'https://infyjava@bitbucket.org/hrdome/native-mobile.git'
+            }
+        }
+
+        stage('get_commit_details') {
+            steps {
+                script {
+                    GIT_COMMIT_MSG = bat (script: 'git log -1 --oneline', returnStdout: true).split('\r\n')[2].trim()
+                    GIT_AUTHOR = bat (script: 'git log -1 --pretty=%%cn', returnStdout: true).split('\r\n')[2].trim()
+                    GIT_EMAIL = bat (script: 'git log -1 --pretty=%%ae', returnStdout: true).split('\r\n')[2].trim()
+
+                }
+            }
+        }
+
+        stage('Install EAS & Dependencies') {
+            steps {
+                 script {
+                    // Install project dependencies
+                    bat 'npm install --legacy-peer-deps'
+                    // Install EAS CLI globally
+                    bat 'npm install -g expo-cli'
+                    // Install EAS CLI globally
+                    bat 'npm install -g eas-cli'
+                }
+            }
+        }
+        
+        stage('Deploy to Expo Go') {
+            steps {
+                 script {
+                    // Deploy to Expo Go for testing
+                   withCredentials([string(credentialsId: 'expo', variable: 'EXPO_TOKEN')]) {
+                    script {
+                        bat 'eas project:init --non-interactive --force'
+                        bat "eas update --branch ${env.PROJECT} --auto --non-interactive"
+                    }
+                }
+                }
+            }
+        }
+
+        // stage('Build APK') {
+        //     steps {
+        //          script {
+                    
+        //             // Use Expo token to authenticate and build the APK using EAS CLI
+        //             withEnv(["EXPO_TOKEN=${env.EXPO_TOKEN}"]) {
+        //                 bat 'eas build -p android --profile staging'
+        //             }
+        //         }
+        //     }
+        // }
+
+        // stage('Build ipa') {
+        //     steps {
+        //          script {
+                    
+        //             // Use Expo token to authenticate and build the APK using EAS CLI
+        //             withEnv(["EXPO_TOKEN=${env.EXPO_TOKEN}"]) {
+        //                 bat 'eas build -p ios --profile staging'
+        //             }
+        //         }
+        //     }
+        // }
+
+        //  stage('Submit to Play Store') {
+        //     steps {
+        //          script {
+        //             // Submit to Google Play Store
+        //             withEnv(["EXPO_TOKEN=${env.EXPO_TOKEN}"]) {
+        //                 bat 'eas submit -p android --latest'
+        //             }
+        //         }
+        //     }
+        // }
+
+        // stage('Submit to App Store') {
+        //     steps {
+        //          script {
+        //             // Submit to Apple App Store
+        //             withEnv(["EXPO_TOKEN=${env.EXPO_TOKEN}"]) {
+        //                 bat 'eas submit -p ios --latest'
+        //             }
+        //         }
+        //     }
+        // }
+        
+        // stage('Archive APK') {
+        //     steps {
+        //          script {
+        //             // Archive the built APK file
+        //             archiveArtifacts artifacts: '**/*.apk', allowEmptyArchive: true
+        //         }
+        //     }
+        // }
+    }
+
+    post {
+        success {
+            script {
+                emailext(
+                to: 'lavanya.satti@infyshine.com, venkatasrikar.potharaju@infyshine.com, padmavathi.kare@infyshine.com',
+                subject: "Update Success_${JOB_NAME}_${env.BUILD_NUMBER}",
+                body: """<!DOCTYPE html>
+                        <html>
+                        <style>
+                        table, th, td { border:1px solid black; border-style: none; }
+                        </style>
+                        <body>
+                        <div>
+                    <p style="background-color: green; text-align: center; color: aliceblue; height: 30px; font-size: 20px; padding-top: 5px;">
+                        SUCCESS
+                    </p>
+                </div>
+                        <table style="width:100%">
+                            <tr><td>Update Status</td><td>: Success</td></tr>
+                            <tr><td>Job</td><td>: ${JOB_NAME}</td></tr>
+                            <tr><td>Update Number</td><td>: ${env.BUILD_NUMBER}</td></tr>
+                            <tr><td>Update URL</td><td>: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td></tr>
+                            <tr><td>Committed by</td><td>: ${GIT_EMAIL}</td></tr>
+                            <tr><td>Last commit message</td><td>: ${GIT_COMMIT_MSG}</td></tr>
+                        </table>
+                        <div>
+                    <p style="background-color: rgb(228, 228, 230); text-align: center; color: rgb(11, 12, 12); height: 30px; font-size: 20px; padding-top: 5px;">
+                        Note*: Please refer above for Update Logs
+                    </p>
+                </div>
+                        </body>
+                        </html>""",
+                mimeType: 'text/html',
+                from: 'onboarding@infyshine.com',
+                // attachmentsPattern: attachments,
+                attachLog: true
+            )
+            }
+            cleanWs()
+        }
+        failure {
+            script {
+                emailext(
+                to: 'lavanya.satti@infyshine.com, venkatasrikar.potharaju@infyshine.com, padmavathi.kare@infyshine.com',
+                subject: "Update Failed_${JOB_NAME}_${env.BUILD_NUMBER}",
+                body: """<!DOCTYPE html>
+                        <html>
+                        <style>
+                        table, th, td { border:1px solid black; border-style: none; }
+                        </style>
+                        <body>
+                        <div>
+                    <p style="background-color: red; text-align: center; color: aliceblue; height: 30px; font-size: 20px; padding-top: 5px;">
+                        FAILED
+                    </p>
+                </div>
+                        <table style="width:100%">
+                            <tr><td>Update Status</td><td>: Failed</td></tr>
+                            <tr><td>Job</td><td>: ${JOB_NAME}</td></tr>
+                            <tr><td>Update Number</td><td>: ${env.BUILD_NUMBER}</td></tr>
+                            <tr><td>Update URL</td><td>: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td></tr>
+                            <tr><td>Committed by</td><td>: ${GIT_EMAIL}</td></tr>
+                            <tr><td>Last commit message</td><td>: ${GIT_COMMIT_MSG}</td></tr>
+                        </table>
+                        <div>
+                    <p style="background-color: rgb(228, 228, 230); text-align: center; color: rgb(11, 12, 12); height: 30px; font-size: 20px; padding-top: 5px;">
+                        Note*: Please refer above for Update Logs
+                    </p>
+                </div>
+                        </body>
+                        </html>""",
+                mimeType: 'text/html',
+                from: 'onboarding@infyshine.com',
+                attachLog: true
+            )
+            }
+            cleanWs()
+        }
+    }
+}

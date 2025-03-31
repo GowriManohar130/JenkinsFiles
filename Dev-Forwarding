@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+    
+    environment {
+        KUBECONFIG = "C:\\Users\\infyshine\\.kube\\config"
+        CONTEXT = "${CONTEXT}"
+    }
+    stages {
+        stage('dev Port Forwarding') {
+            steps {
+                script {
+                    if(CONTEXT == "DEV_QA"){
+                    bat 'taskkill /F /IM kubectl.exe'
+                    bat 'start kubectl config use-context DEV_QA'
+                    bat 'start kubectl proxy'
+                    bat 'start kubectl port-forward service/mongodb-aggregations-service 27018:27017 -n dev'
+                    bat 'start kubectl port-forward service/mysql-common-data-service 3307:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-users-service 3308:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-timesheets-service 3309:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-leaves-service 3310:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-organizations-service 3311:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-expenses-service 3312:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-projects-service 3313:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-appowner-service 3314:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-appraisals-service 3315:3306 -n dev'
+                    bat 'start kubectl port-forward service/mysql-payroll-service 3316:3306 -n dev'
+                    bat 'start kubectl port-forward service/mongodb-aggregations-service 27019:27017 -n qa'
+                    bat 'start kubectl port-forward service/mysql-common-data-service 3317:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-users-service 3318:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-timesheets-service 3319:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-leaves-service 3320:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-organizations-service 3321:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-expenses-service 3322:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-projects-service 3323:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-appowner-service 3324:3306 -n qa'
+                    bat 'start kubectl port-forward service/mysql-appraisals-service 3325:3306 -n qa'
+                    bat 'kubectl port-forward service/mysql-payroll-service 3326:3306 -n qa'
+                }
+                else{
+                    bat 'taskkill /F /IM kubectl.exe'
+                    bat 'start kubectl config use-context monitoring'
+                    bat 'kubectl proxy'
+                }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            echo 'Port forwarding completed.'
+        }
+    }
+}

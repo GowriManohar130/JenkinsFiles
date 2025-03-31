@@ -1,0 +1,214 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven'
+    }
+
+    environment {
+        IMAGE_NAME = "infyshinetech/emails"
+        KUBECONFIG = "C:\\Users\\infyshine\\.kube\\config"
+        SONAR_TOKEN = credentials('sonar-token')
+    }
+
+        stages {
+            stage('Checkout') {
+            steps {
+                script {
+                    checkout scm
+                }
+            }
+        }
+            stage('get_commit_details') {
+            steps {
+                script {
+                    GIT_COMMIT_MSG = bat (script: 'git log -1 --oneline', returnStdout: true).split('\r\n')[2].trim()
+                    GIT_AUTHOR = bat (script: 'git log -1 --pretty=%%cn', returnStdout: true).split('\r\n')[2].trim()
+                    GIT_EMAIL = bat (script: 'git log -1 --pretty=%%ae', returnStdout: true).split('\r\n')[2].trim()
+
+                }
+            }
+        }
+
+        stage('Dev image backup') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker')
+                     {
+                        docker.image("${IMAGE_NAME}:dev").pull()
+                         bat "docker tag ${IMAGE_NAME}:dev ${IMAGE_NAME}:dev-prev"
+                         docker.image("${IMAGE_NAME}:dev-prev").push()
+                         bat "docker rmi ${IMAGE_NAME}:dev"
+                        bat "docker rmi ${IMAGE_NAME}:dev-prev"
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Dependency Scan') {
+            steps {
+                // Run Trivy scan on the code repository
+                // bat 'docker run --rm -v %CD%:/project aquasec/trivy:latest fs --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL /project > trivy-report.txt'
+                bat 'docker run --rm -v %CD%:/project aquasec/trivy:latest fs --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL /project > trivy-report.txt'
+            }
+        }
+        
+        stage('Maven Build') {
+            steps {
+                script {
+                    // Running Maven build
+                    bat "${tool 'maven'}/bin/mvn clean install"
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            environment {
+                scannerHome = tool 'sonar-scanner'
+            }
+            steps {
+                // Run SonarQube analysis
+                withSonarQubeEnv('sonar') {
+                    bat "\"%scannerHome%\\bin\\sonar-scanner\" -Dsonar.projectKey=${JOB_NAME} -Dsonar.projectName=${JOB_NAME} -Dsonar.java.binaries=target"
+                }
+            }
+        }
+
+        // stage('Quality Gate') {
+        //     steps {
+        //         script {
+        //             def qg = waitForQualityGate()
+        //             if (qg.status != 'OK') {
+        //                 error "Pipeline aborted due to quality gate failure: ${qg.status}"
+        //             } else {
+        //                 echo "Quality Gate passed successfully: ${qg.status}"
+        //             }
+        //         }
+        //     }
+        // }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Building Docker image
+                    docker.build("${IMAGE_NAME}:dev")
+                }
+            }
+        }
+
+        stage('Trivy Docker Image Scan') {
+            steps {
+                script {
+                    // Run Trivy scan on the Docker image
+                    bat 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL %IMAGE_NAME%:dev > trivy-docker-image-report.txt'
+                    bat "docker rmi aquasec/trivy:latest"
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker') {
+                        docker.image("${IMAGE_NAME}:dev").push()
+                        bat "docker rmi ${IMAGE_NAME}:dev"
+                    }
+                }
+            }
+        }
+
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    // Deploy to Kubernetes
+                    bat 'kubectl rollout restart deployment/emails-deployment -n dev'
+                }
+            }
+        }
+        
+    }
+
+    post {
+        success {
+            script {
+                def attachments = 'trivy-report.txt,trivy-docker-image-report.txt'
+                emailext(
+                to: 'java@infyshine.com, devops@infyshine.com',
+                subject: "Build Success_${JOB_NAME}_${env.BUILD_NUMBER}",
+                body: """<!DOCTYPE html>
+                        <html>
+                        <style>
+                        table, th, td { border:1px solid black; border-style: none; }
+                        </style>
+                        <body>
+                        <div>
+                    <p style="background-color: green; text-align: center; color: aliceblue; height: 30px; font-size: 20px; padding-top: 5px;">
+                        SUCCESS
+                    </p>
+                </div>
+                        <table style="width:100%">
+                            <tr><td>Build Status</td><td>: Success</td></tr>
+                            <tr><td>Job</td><td>: ${JOB_NAME}</td></tr>
+                            <tr><td>Build Number</td><td>: ${env.BUILD_NUMBER}</td></tr>
+                            <tr><td>Build URL</td><td>: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td></tr>
+                            <tr><td>Committed by</td><td>: ${GIT_EMAIL}</td></tr>
+                            <tr><td>Last commit message</td><td>: ${GIT_COMMIT_MSG}</td></tr>
+                        </table>
+                        <div>
+                    <p style="background-color: rgb(228, 228, 230); text-align: center; color: rgb(11, 12, 12); height: 30px; font-size: 20px; padding-top: 5px;">
+                        Note*: Please refer above for Build Logs and Tivy Scan Report
+                    </p>
+                </div>
+                        </body>
+                        </html>""",
+                mimeType: 'text/html',
+                from: 'onboarding@infyshine.com',
+                attachmentsPattern: attachments,
+                attachLog: true
+            )
+            }
+            cleanWs()
+        }
+        failure {
+            script {
+                def attachments = 'trivy-report.txt,trivy-docker-image-report.txt'
+                emailext(
+                to: 'java@infyshine.com, devops@infyshine.com',
+                subject: "Build Failed_${JOB_NAME}_${env.BUILD_NUMBER}",
+                body: """<!DOCTYPE html>
+                        <html>
+                        <style>
+                        table, th, td { border:1px solid black; border-style: none; }
+                        </style>
+                        <body>
+                        <div>
+                    <p style="background-color: red; text-align: center; color: aliceblue; height: 30px; font-size: 20px; padding-top: 5px;">
+                        FAILED
+                    </p>
+                </div>
+                        <table style="width:100%">
+                            <tr><td>Build Status</td><td>: Failed</td></tr>
+                            <tr><td>Job</td><td>: ${JOB_NAME}</td></tr>
+                            <tr><td>Build Number</td><td>: ${env.BUILD_NUMBER}</td></tr>
+                            <tr><td>Build URL</td><td>: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></td></tr>
+                            <tr><td>Committed by</td><td>: ${GIT_EMAIL}</td></tr>
+                            <tr><td>Last commit message</td><td>: ${GIT_COMMIT_MSG}</td></tr>
+                        </table>
+                        <div>
+                    <p style="background-color: rgb(228, 228, 230); text-align: center; color: rgb(11, 12, 12); height: 30px; font-size: 20px; padding-top: 5px;">
+                        Note*: Please refer above for Build Logs and Tivy Scan Report
+                    </p>
+                </div>
+                        </body>
+                        </html>""",
+                mimeType: 'text/html',
+                from: 'onboarding@infyshine.com',
+                attachmentsPattern: attachments,
+                attachLog: true
+            )
+            }
+            cleanWs()
+        }
+    }
+}

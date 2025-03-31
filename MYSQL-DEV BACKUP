@@ -1,0 +1,100 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
+pipeline {
+    agent any
+    
+    environment {
+        MYSQL_USER = 'root'
+        MYSQL_PASSWORD = 'root'
+        MYSQL_DATABASE = 'commondata'
+        MYSQL_DATABASE1 = 'users'
+        MYSQL_DATABASE2 = 'timesheets'
+        MYSQL_DATABASE3 = 'leaves'
+        MYSQL_DATABASE4 = 'organizations'
+        MYSQL_DATABASE5 = 'expenses'
+        MYSQL_DATABASE6 = 'projects'
+        MYSQL_DATABASE7 = 'appowner'
+        MYSQL_DATABASE8 = 'appraisals'
+        MYSQL_HOST = 'localhost'
+        MYSQL_PORT = '3307'
+        MYSQL_PORT1 = '3308'
+        MYSQL_PORT2 = '3309'
+        MYSQL_PORT3 = '3310'
+        MYSQL_PORT4 = '3311'
+        MYSQL_PORT5 = '3312'
+        MYSQL_PORT6 = '3313'
+        MYSQL_PORT7 = '3314'
+        MYSQL_PORT8 = '3315'
+        EXPORT_DIR = 'C:\\Users\\infyshine\\Downloads\\backup\\dev'
+    }
+    
+    stages {
+        stage('Port Forwarding') {
+            steps {
+                script {
+                    // Start port forwarding process in the background
+                    bat 'start kubectl port-forward service/mysql-common-data-service 3307:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-users-service 3308:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-timesheets-service 3309:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-leaves-service 3310:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-organizations-service 3311:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-expenses-service 3312:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-projects-service 3313:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-appowner-service 3314:3306 -n dev '
+                    bat 'start kubectl port-forward service/mysql-appraisals-service 3315:3306 -n dev '
+                }
+            }
+        }
+        
+        stage('Database Backup') {
+            steps {
+                script {
+                    def exportDir = env.EXPORT_DIR
+                    def timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date())
+                    def backupFolder = "${exportDir}\\MYSQL-BACKUP-DEV_${timestamp}"
+                    bat "mkdir \"${backupFolder}\""
+                    def exportFile = "${backupFolder}\\commondata-dev.sql"
+                    def exportFile1 = "${backupFolder}\\users-dev.sql"
+                    def exportFile2 = "${backupFolder}\\timesheets-dev.sql"
+                    def exportFile3 = "${backupFolder}\\leaves-dev.sql"
+                    def exportFile4 = "${backupFolder}\\organizations-dev.sql"
+                    def exportFile5 = "${backupFolder}\\expenses-dev.sql"
+                    def exportFile6 = "${backupFolder}\\projects-dev.sql"
+                    def exportFile7 = "${backupFolder}\\appowner-dev.sql"
+                    def exportFile8 = "${backupFolder}\\appraisals-dev.sql"
+                    
+                    def mysqldumpCommand = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT} ${env.MYSQL_DATABASE} > ${exportFile}"
+                    def mysqldumpCommand1 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT1} ${env.MYSQL_DATABASE1} > ${exportFile1}"
+                    def mysqldumpCommand2 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT2} ${env.MYSQL_DATABASE2} > ${exportFile2}"
+                    def mysqldumpCommand3 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT3} ${env.MYSQL_DATABASE3} > ${exportFile3}"
+                    def mysqldumpCommand4 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT4} ${env.MYSQL_DATABASE4} > ${exportFile4}"
+                    def mysqldumpCommand5 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT5} ${env.MYSQL_DATABASE5} > ${exportFile5}"
+                    def mysqldumpCommand6 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT6} ${env.MYSQL_DATABASE6} > ${exportFile6}"
+                    def mysqldumpCommand7 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT7} ${env.MYSQL_DATABASE7} > ${exportFile7}"
+                    def mysqldumpCommand8 = "\"C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump\" -u${env.MYSQL_USER} -p${env.MYSQL_PASSWORD} -h${env.MYSQL_HOST} -P${env.MYSQL_PORT8} ${env.MYSQL_DATABASE8} > ${exportFile8}"
+                    
+                    bat mysqldumpCommand
+                    bat mysqldumpCommand1
+                    bat mysqldumpCommand2
+                    bat mysqldumpCommand3
+                    bat mysqldumpCommand4
+                    bat mysqldumpCommand5
+                    bat mysqldumpCommand6
+                    bat mysqldumpCommand7
+                    bat mysqldumpCommand8
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up port forwarding...'
+            // Clean up port forwarding using kubectl
+            script {
+                bat 'taskkill /F /IM kubectl.exe'
+            }
+        }
+    }
+}
